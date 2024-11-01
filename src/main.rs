@@ -66,7 +66,7 @@ fn tokenize(expr: String) -> Vec<String> {
     .collect()
 }
 
-fn parse<'a>(tokens: &'a [String]) -> Result<(RispExp, &'a [String]), RispErr> {
+fn parse(tokens: &[String]) -> Result<(RispExp, &[String]), RispErr> {
   let (token, rest) = tokens
     .split_first()
     .ok_or(RispErr::Reason("could not get token".to_string()))?;
@@ -77,7 +77,7 @@ fn parse<'a>(tokens: &'a [String]) -> Result<(RispExp, &'a [String]), RispErr> {
   }
 }
 
-fn read_seq<'a>(tokens: &'a [String]) -> Result<(RispExp, &'a [String]), RispErr> {
+fn read_seq(tokens: &[String]) -> Result<(RispExp, &[String]), RispErr> {
   let mut res: Vec<RispExp> = vec![];
   let mut xs = tokens;
   loop {
@@ -87,14 +87,14 @@ fn read_seq<'a>(tokens: &'a [String]) -> Result<(RispExp, &'a [String]), RispErr
     if next_token == ")" {
       return Ok((RispExp::List(res), rest)); // skip `)`, head to the token after
     }
-    let (exp, new_xs) = parse(&xs)?;
+    let (exp, new_xs) = parse(xs)?;
     res.push(exp);
     xs = new_xs;
   }
 }
 
 fn parse_atom(token: &str) -> RispExp {
-  match token.as_ref() {
+  match token {
     "true" => RispExp::Bool(true),
     "false" => RispExp::Bool(false),
     _ => {
@@ -124,7 +124,7 @@ macro_rules! ensure_tonicity {
           Some(x) => $check_fn(prev, x) && f(x, &xs[1..]),
           None => true,
         }
-      };
+      }
       Ok(RispExp::Bool(f(first, rest)))
     }
   }};
@@ -179,7 +179,7 @@ fn default_env<'a>() -> RispEnv<'a> {
 }
 
 fn parse_list_of_floats(args: &[RispExp]) -> Result<Vec<f64>, RispErr> {
-  args.iter().map(|x| parse_single_float(x)).collect()
+  args.iter().map(parse_single_float).collect()
 }
 
 fn parse_single_float(exp: &RispExp) -> Result<f64, RispErr> {
@@ -204,13 +204,11 @@ fn eval_if_args(arg_forms: &[RispExp], env: &mut RispEnv) -> Result<RispExp, Ris
       let res_form = arg_forms
         .get(form_idx)
         .ok_or(RispErr::Reason(format!("expected form idx={}", form_idx)))?;
-      let res_eval = eval(res_form, env);
-
-      res_eval
+      eval(res_form, env)
     }
     _ => Err(RispErr::Reason(format!(
       "unexpected test form='{}'",
-      test_form.to_string()
+      test_form
     ))),
   }
 }
@@ -276,7 +274,7 @@ fn env_get(k: &str, env: &RispEnv) -> Option<RispExp> {
   match env.data.get(k) {
     Some(exp) => Some(exp.clone()),
     None => match &env.outer {
-      Some(outer_env) => env_get(k, &outer_env),
+      Some(outer_env) => env_get(k, outer_env),
       None => None,
     },
   }
