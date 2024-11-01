@@ -15,7 +15,7 @@ enum RispExp {
   Symbol(String),
   Number(f64),
   List(Vec<RispExp>),
-  Func(fn(&[RispExp]) -> Result<RispExp, RispErr>),
+  Func(&'static str, fn(&[RispExp]) -> Result<RispExp, RispErr>),
   Lambda(RispLambda),
 }
 
@@ -33,10 +33,10 @@ impl fmt::Display for RispExp {
       RispExp::Number(n) => n.to_string(),
       RispExp::List(list) => {
         let xs: Vec<String> = list.iter().map(|x| x.to_string()).collect();
-        format!("({})", xs.join(","))
+        format!("({})", xs.join(" "))
       }
-      RispExp::Func(_) => "Function {}".to_string(),
-      RispExp::Lambda(_) => "Lambda {}".to_string(),
+      RispExp::Func(name, _) => name.to_string(),
+      RispExp::Lambda(lambda) => format!("(fn {} {})", lambda.params_exp, lambda.body_exp),
     };
 
     write!(f, "{}", str)
@@ -133,7 +133,7 @@ fn default_env<'a>() -> RispEnv<'a> {
   let mut data: HashMap<String, RispExp> = HashMap::new();
   data.insert(
     "+".to_string(),
-    RispExp::Func(|args: &[RispExp]| -> Result<RispExp, RispErr> {
+    RispExp::Func("+", |args: &[RispExp]| -> Result<RispExp, RispErr> {
       let sum = parse_list_of_floats(args)?
         .iter()
         .fold(0.0, |sum, a| sum + a);
@@ -143,7 +143,7 @@ fn default_env<'a>() -> RispEnv<'a> {
   );
   data.insert(
     "-".to_string(),
-    RispExp::Func(|args: &[RispExp]| -> Result<RispExp, RispErr> {
+    RispExp::Func("-", |args: &[RispExp]| -> Result<RispExp, RispErr> {
       let floats = parse_list_of_floats(args)?;
       let first = *floats
         .first()
@@ -155,23 +155,23 @@ fn default_env<'a>() -> RispEnv<'a> {
   );
   data.insert(
     "=".to_string(),
-    RispExp::Func(ensure_tonicity!(|a, b| a == b)),
+    RispExp::Func("=", ensure_tonicity!(|a, b| a == b)),
   );
   data.insert(
     ">".to_string(),
-    RispExp::Func(ensure_tonicity!(|a, b| a > b)),
+    RispExp::Func(">", ensure_tonicity!(|a, b| a > b)),
   );
   data.insert(
     ">=".to_string(),
-    RispExp::Func(ensure_tonicity!(|a, b| a >= b)),
+    RispExp::Func(">=", ensure_tonicity!(|a, b| a >= b)),
   );
   data.insert(
     "<".to_string(),
-    RispExp::Func(ensure_tonicity!(|a, b| a < b)),
+    RispExp::Func("<", ensure_tonicity!(|a, b| a < b)),
   );
   data.insert(
     "<=".to_string(),
-    RispExp::Func(ensure_tonicity!(|a, b| a <= b)),
+    RispExp::Func("<=", ensure_tonicity!(|a, b| a <= b)),
   );
 
   RispEnv { data, outer: None }
@@ -319,8 +319,6 @@ fn eval_forms(arg_forms: &[RispExp], env: &mut RispEnv) -> Result<Vec<RispExp>, 
 fn eval(exp: &RispExp, env: &mut RispEnv) -> Result<RispExp, RispErr> {
   match exp {
     RispExp::Symbol(k) => env_get(k, env).ok_or(RispErr(format!("unexpected symbol k='{}'", k))),
-    RispExp::Bool(_a) => Ok(exp.clone()),
-    RispExp::Number(_a) => Ok(exp.clone()),
 
     RispExp::List(list) => {
       let first_form = list
@@ -332,7 +330,7 @@ fn eval(exp: &RispExp, env: &mut RispEnv) -> Result<RispExp, RispErr> {
         None => {
           let first_eval = eval(first_form, env)?;
           match first_eval {
-            RispExp::Func(f) => f(&eval_forms(arg_forms, env)?),
+            RispExp::Func(_name, f) => f(&eval_forms(arg_forms, env)?),
             RispExp::Lambda(lambda) => {
               let new_env = &mut env_for_lambda(lambda.params_exp, arg_forms, env)?;
               eval(&lambda.body_exp, new_env)
@@ -342,8 +340,7 @@ fn eval(exp: &RispExp, env: &mut RispEnv) -> Result<RispExp, RispErr> {
         }
       }
     }
-    RispExp::Func(_) => Err(RispErr("unexpected form".to_string())),
-    RispExp::Lambda(_) => Err(RispErr("unexpected form".to_string())),
+    _ => Ok(exp.clone()),
   }
 }
 
