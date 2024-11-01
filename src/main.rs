@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::io;
 use std::num::ParseFloatError;
 use std::rc::Rc;
+
+use rustyline::DefaultEditor;
 
 /*
   Types
@@ -357,21 +358,16 @@ fn parse_eval(expr: String, env: &mut RispEnv) -> Result<RispExp, RispErr> {
   Ok(evaled_exp)
 }
 
-fn slurp_expr() -> String {
-  let mut expr = String::new();
-
-  io::stdin()
-    .read_line(&mut expr)
-    .expect("Failed to read line");
-
-  expr
-}
-
 fn main() {
+  let mut rl = DefaultEditor::new().unwrap();
+
   let env = &mut default_env();
   loop {
-    println!("risp >");
-    let expr = slurp_expr();
+    let readline = rl.readline("risp > ");
+    let Ok(expr) = readline else {
+      break;
+    };
+    rl.add_history_entry(&expr).unwrap();
     match parse_eval(expr, env) {
       Ok(res) => println!("// 🔥 => {}", res),
       Err(e) => match e {
