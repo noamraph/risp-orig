@@ -110,6 +110,24 @@ fn parse_atom(token: &str) -> RispExp {
   Env
 */
 
+fn add(args: &[RispExp]) -> Result<RispExp, RispErr> {
+  let sum = parse_list_of_floats(args)?
+    .iter()
+    .fold(0.0, |sum, a| sum + a);
+
+  Ok(RispExp::Number(sum))
+}
+
+fn sub(args: &[RispExp]) -> Result<RispExp, RispErr> {
+  let floats = parse_list_of_floats(args)?;
+  let first = *floats
+    .first()
+    .ok_or(RispErr("expected at least one number".to_string()))?;
+  let sum_of_rest = floats[1..].iter().fold(0.0, |sum, a| sum + a);
+
+  Ok(RispExp::Number(first - sum_of_rest))
+}
+
 macro_rules! ensure_tonicity {
   ($check_fn:expr) => {{
     |args: &[RispExp]| -> Result<RispExp, RispErr> {
@@ -130,51 +148,23 @@ macro_rules! ensure_tonicity {
 }
 
 fn default_env<'a>() -> RispEnv<'a> {
-  let mut data: HashMap<String, RispExp> = HashMap::new();
-  data.insert(
-    "+".to_string(),
-    RispExp::Func("+", |args: &[RispExp]| -> Result<RispExp, RispErr> {
-      let sum = parse_list_of_floats(args)?
-        .iter()
-        .fold(0.0, |sum, a| sum + a);
-
-      Ok(RispExp::Number(sum))
-    }),
-  );
-  data.insert(
-    "-".to_string(),
-    RispExp::Func("-", |args: &[RispExp]| -> Result<RispExp, RispErr> {
-      let floats = parse_list_of_floats(args)?;
-      let first = *floats
-        .first()
-        .ok_or(RispErr("expected at least one number".to_string()))?;
-      let sum_of_rest = floats[1..].iter().fold(0.0, |sum, a| sum + a);
-
-      Ok(RispExp::Number(first - sum_of_rest))
-    }),
-  );
-  data.insert(
-    "=".to_string(),
-    RispExp::Func("=", ensure_tonicity!(|a, b| a == b)),
-  );
-  data.insert(
-    ">".to_string(),
-    RispExp::Func(">", ensure_tonicity!(|a, b| a > b)),
-  );
-  data.insert(
-    ">=".to_string(),
-    RispExp::Func(">=", ensure_tonicity!(|a, b| a >= b)),
-  );
-  data.insert(
-    "<".to_string(),
-    RispExp::Func("<", ensure_tonicity!(|a, b| a < b)),
-  );
-  data.insert(
-    "<=".to_string(),
-    RispExp::Func("<=", ensure_tonicity!(|a, b| a <= b)),
-  );
-
-  RispEnv { data, outer: None }
+  type Func = fn(&[RispExp]) -> Result<RispExp, RispErr>;
+  let funcs: &[(&str, Func)] = &[
+    ("+", add),
+    ("-", sub),
+    ("=", ensure_tonicity!(|a, b| a == b)),
+    (">", ensure_tonicity!(|a, b| a > b)),
+    (">=", ensure_tonicity!(|a, b| a >= b)),
+    ("<", ensure_tonicity!(|a, b| a < b)),
+    ("<=", ensure_tonicity!(|a, b| a <= b)),
+  ];
+  RispEnv {
+    data: funcs
+      .iter()
+      .map(|(k, f)| (k.to_string(), RispExp::Func(k, *f)))
+      .collect(),
+    outer: None,
+  }
 }
 
 fn parse_list_of_floats(args: &[RispExp]) -> Result<Vec<f64>, RispErr> {
